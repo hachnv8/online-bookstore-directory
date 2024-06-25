@@ -12,7 +12,7 @@ public class KafkaConfig {
     public String topic;
 
     @Bean
-    public NewTopic libraryEvents() {
+    public NewTopic bookEvents() {
         return TopicBuilder
                 .name(topic)
                 .partitions(3)

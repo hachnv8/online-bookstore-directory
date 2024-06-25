@@ -1,5 +1,6 @@
 package com.learnmicroservice.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.learnmicroservice.entity.Book;
 import com.learnmicroservice.payload.request.BookRequest;
 import com.learnmicroservice.service.impl.BookServiceImpl;
@@ -11,6 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 
 @RestController
 @RequestMapping("api/books")
@@ -28,7 +31,7 @@ public class BookController {
     }
 
     @PostMapping
-    public ResponseEntity<Book> addBook(@RequestBody Book book) {
+    public ResponseEntity<Book> addBook(@RequestBody Book book) throws ExecutionException, JsonProcessingException, InterruptedException, TimeoutException {
         Book savedBook = bookService.createBook(book);
         return new ResponseEntity<>(savedBook, HttpStatus.CREATED);
     }

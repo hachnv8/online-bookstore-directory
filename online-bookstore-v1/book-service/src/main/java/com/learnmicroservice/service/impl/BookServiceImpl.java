@@ -1,19 +1,30 @@
 package com.learnmicroservice.service.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.learnmicroservice.domain.BookEvent;
+import com.learnmicroservice.domain.BookEventType;
 import com.learnmicroservice.entity.Book;
 import com.learnmicroservice.exception.ResourceNotFoundException;
+import com.learnmicroservice.kafka.BookEventProducer;
 import com.learnmicroservice.repository.BookRepository;
 import com.learnmicroservice.service.BookService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 
 @Service
 @RequiredArgsConstructor
 public class BookServiceImpl implements BookService {
     private final BookRepository bookRepository;
+    private final RedisTemplate<String, String> redisTemplate;
+    private static final String BOOK_CACHE = "BOOK";
+    private final BookEventProducer bookEventProducer;
 
     @Override
     public List<Book> getBooks() {
@@ -21,11 +32,28 @@ public class BookServiceImpl implements BookService {
     }
 
     public Book getBookById(Long id) {
-        return bookRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Book not found with id :" + id));
+        // call redis to get data
+        Book book = (Book) redisTemplate.opsForHash().get(BOOK_CACHE, id.toString());
+        if (book == null) {
+            book = bookRepository.findById(id).orElseThrow(
+                    () -> new ResourceNotFoundException("Book not found with id :" + id)
+            );
+            if (book != null) {
+                redisTemplate.opsForHash().put(BOOK_CACHE, id.toString(), book.toString());
+            }
+        }
+
+        return book;
     }
 
-    public Book createBook(Book book) {
-        return bookRepository.save(book);
+    public Book createBook(Book book) throws ExecutionException, JsonProcessingException, InterruptedException, TimeoutException {
+        Book savedBook = bookRepository.save(book);
+        // invoke the kafka producer
+        BookEventType bookEventType = BookEventType.NEW;
+        BookEvent bookEvent = new BookEvent(savedBook.getBookId(), bookEventType, savedBook);
+        SendResult<Integer, String> result = bookEventProducer.sendBookEvent(bookEvent);
+        redisTemplate.opsForHash().put(BOOK_CACHE, String.valueOf(savedBook.getBookId()), savedBook.toString());
+        return savedBook;
     }
 
     public Book updateBook(Long id, Book bookDetails) {
@@ -36,7 +64,9 @@ public class BookServiceImpl implements BookService {
         book.setPrice(bookDetails.getPrice());
         book.setCategoryId(bookDetails.getCategoryId());
         book.setAuthorId(bookDetails.getAuthorId());
-        return bookRepository.save(book);
+        Book updatedBook =  bookRepository.save(book);
+        redisTemplate.opsForHash().put(BOOK_CACHE, updatedBook.getBookId(), updatedBook.toString());
+        return updatedBook;
     }
 
     public void deleteBook(Long id) {

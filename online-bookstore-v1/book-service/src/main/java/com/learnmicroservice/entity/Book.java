@@ -17,7 +17,7 @@ import com.learnmicroservice.model.BaseAudit;
 public class Book extends BaseAudit {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private long BookId;
+    private int bookId;
     private String title;
     private Long authorId;
     private Long publisherId;
